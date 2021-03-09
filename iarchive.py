@@ -5,12 +5,10 @@
 # Описание: Программа для работы с архивом данных archive.org, управляемая ключами командной строки
 # ТЗ:       https://docs.google.com/document/d/1KMWpKWA96OurH2V9oIm2444IJM2iO5BPi_QwrjAf0FQ/edit
 #
-# Установка программ и библиотек:
-#  curl -LOs https://archive.org/download/ia-pex/ia
-#  chmod +x ia
+# Установка библиотек:
+#  pip install internetarchive
 #  pip install pandas
 #  pip install openpyxl
-#  chmod +x iarchive.py
 
 from argparse import ArgumentParser
 from openpyxl import load_workbook
@@ -39,8 +37,8 @@ def read_queries(in_file_name):
 # поиск идентификаторов по запросу
 #-----------------------------------------------------------------------
 def search_identifiers(query):
-    result = subprocess.run(['./ia', 'search', query, '--itemlist'], stdout=subprocess.PIPE)
-    list_data = result.stdout.decode('utf-8').split('\n')
+    result = subprocess.run(['ia', 'search', query, '--itemlist'], stdout=subprocess.PIPE)
+    list_data = result.stdout.decode('utf-8').splitlines()
     return list_data
 
 
@@ -48,7 +46,7 @@ def search_identifiers(query):
 # получение метаданных по идентификатору
 #-----------------------------------------------------------------------
 def get_dict_data(identifier):
-    result = subprocess.run(['./ia', 'metadata', identifier], stdout=subprocess.PIPE)
+    result = subprocess.run(['ia', 'metadata', identifier], stdout=subprocess.PIPE)
     json_data = result.stdout.decode('utf-8')
     dict_data = json.loads(json_data)
     return dict_data
@@ -140,10 +138,11 @@ def search_and_save(queries, types, out_file_name):
     writer.save()
 
     # перебираем все запросы
-    for q, (query, out_file_path) in enumerate(queries.items()): #enumerate(sorted(queries.items())):
+    for q, (query, out_file_path) in enumerate(queries.items()):
 
         # получаем список идентификаторов для данного запроса
         identifiers = search_identifiers(query)
+        print(identifiers)
 
         # если индентификатор уже встречался при выполнении предыдущих запросов, то исключаем его из списка
         identifiers_processed = pd.read_excel(out_file_name)['identifier'].tolist()
@@ -151,6 +150,8 @@ def search_and_save(queries, types, out_file_name):
 
         # перебираем по очереди все идентификаторы
         for i, identifier in enumerate(identifiers):
+
+            print(i, identifier)
 
             # название произведения
             book_title = ''
