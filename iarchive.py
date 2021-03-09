@@ -142,7 +142,6 @@ def search_and_save(queries, types, out_file_name):
 
         # получаем список идентификаторов для данного запроса
         identifiers = search_identifiers(query)
-        print(identifiers)
 
         # если индентификатор уже встречался при выполнении предыдущих запросов, то исключаем его из списка
         identifiers_processed = pd.read_excel(out_file_name)['identifier'].tolist()
@@ -150,8 +149,6 @@ def search_and_save(queries, types, out_file_name):
 
         # перебираем по очереди все идентификаторы
         for i, identifier in enumerate(identifiers):
-
-            print(i, identifier)
 
             # название произведения
             book_title = ''
