@@ -16,6 +16,7 @@ from sys import getdefaultencoding
 from email.utils import parseaddr
 import pandas as pd
 import subprocess
+import requests
 import json
 import sys
 import os
@@ -46,10 +47,12 @@ def search_identifiers(query):
 # получение метаданных по идентификатору
 #-----------------------------------------------------------------------
 def get_dict_data(identifier):
-    result = subprocess.run(['ia', 'metadata', identifier], stdout=subprocess.PIPE)
-    json_data = result.stdout.decode('utf-8')
-    dict_data = json.loads(json_data)
-    return dict_data
+    #result = subprocess.run(['ia', 'metadata', identifier], stdout=subprocess.PIPE)
+    #json_data = result.stdout.decode('utf-8')
+    #dict_data = json.loads(json_data)
+    #return dict_data
+    r = requests.get('https://archive.org/metadata/'+identifier)
+    return r.json()
 
 
 #-----------------------------------------------------------------------
@@ -274,6 +277,40 @@ def search_and_save(queries, types, out_file_name):
 
 
 #-----------------------------------------------------------------------
+# функция проверки существования и блокировки файла
+#-----------------------------------------------------------------------
+def can_overwrite(file_name):
+
+    # создаем список возможных lock-файлов
+    lock_file_names = [file_name + '.lckchk',
+                       os.path.join(os.path.dirname(file_name), '.~lock.' + os.path.basename(file_name) + '#')]
+
+    if os.path.exists(file_name):
+        try:
+            open(file_name, 'a').close()
+            if len([f for f in lock_file_names if os.path.isfile(f)]) > 0:
+                remove_file = input('File %s is locked. Overwrite? (Y/n) : ' % file_name)
+                if remove_file.lower() in ['y', 'yes', '1', 'да']:
+                    for lock_file_name in lock_file_names:
+                        if os.path.exists(lock_file_name):
+                            os.remove(lock_file_name)
+                    return True
+                else:
+                    return False
+            else:
+                remove_file = input('File %s exists. Overwrite? (Y/n) : ' % file_name)
+                if remove_file.lower() in ['y', 'yes', '1', 'да']:
+                    return True
+                else:
+                    return False
+        except IOError:
+            print('File %s is used by another application')
+            return False
+    else:
+        return True
+
+
+#-----------------------------------------------------------------------
 # вывод справки на консоль
 #-----------------------------------------------------------------------
 def print_help(param=None):
@@ -326,60 +363,71 @@ def print_help(param=None):
 
 if __name__ == '__main__':
 
-    # задаем имя файла со списком запросов по умолчанию
-    in_file_name = 'query.xlsx'
+    try:
 
-    # задаем имя файла со списком загружаемых файлов по умолчанию
-    out_file_name = 'download.xlsx'
+        # задаем имя файла со списком запросов по умолчанию
+        in_file_name = 'query.xlsx'
 
-    # вывод справочной информации
-    if len(sys.argv)==2 and ('-h' in sys.argv[1] or '--help' in sys.argv[1] or '/?' in sys.argv[1]):
-        print_help()
-        exit(0)
-    if len(sys.argv)>=3 and ('-h' in sys.argv[1] or '--help' in sys.argv[1] or '/?' in sys.argv[1]):
-        print_help(sys.argv[2])
-        exit(0)
+        # задаем имя файла со списком загружаемых файлов по умолчанию
+        out_file_name = 'download.xlsx'
 
-    # разбор параметров командной строки
-    parser = ArgumentParser()
-    parser.add_argument('-s', '--search', nargs='*', help='mode of forming the list of downloadable files')
-    parser.add_argument('-i', '--input', nargs='?', const=in_file_name, help='name of XLSX file with the list of queries')
-    parser.add_argument('-o', '--output', nargs='?', const=out_file_name, help='name of XLSX file with the list of downloadable files')
-    parser.add_argument('-t', '--types', nargs='*', help='file name extensions')
-    args = parser.parse_args()
+        # вывод справочной информации
+        if len(sys.argv)==2 and ('-h' in sys.argv[1] or '--help' in sys.argv[1] or '/?' in sys.argv[1]):
+            print_help()
+            sys.exit()
+        if len(sys.argv)>=3 and ('-h' in sys.argv[1] or '--help' in sys.argv[1] or '/?' in sys.argv[1]):
+            print_help(sys.argv[2])
+            sys.exit()
 
-    # режим поиска файлов по запросам
-    if args.search is not None:
+        # разбор параметров командной строки
+        parser = ArgumentParser()
+        parser.add_argument('-s', '--search', nargs='*', help='mode of forming the list of downloadable files')
+        parser.add_argument('-i', '--input', nargs='?', const=in_file_name, help='name of XLSX file with the list of queries')
+        parser.add_argument('-o', '--output', nargs='?', const=out_file_name, help='name of XLSX file with the list of downloadable files')
+        parser.add_argument('-t', '--types', nargs='*', help='file name extensions')
+        args = parser.parse_args()
 
-        # список запросов
-        queries = {}
+        # режим поиска файлов по запросам
+        if args.search is not None:
 
-        # загружаем запросы из командной строки
-        if len(args.search) > 0:
-            # создаем список
-            queries_list = [query[:-1] if query[-1] == ',' else query for query in args.search]
-            # создаем словарь
-            queries_dict = {query: check_file_name(query, ' ') for query in queries_list}
-            # добавляем в словарь
-            queries = dict(list(queries_dict.items()) + list(queries.items()))
+            # список запросов
+            queries = {}
+
+            # загружаем запросы из командной строки
+            if len(args.search) > 0:
+                # создаем список
+                queries_list = [query[:-1] if query[-1] == ',' else query for query in args.search]
+                # создаем словарь
+                queries_dict = {query: check_file_name(query, ' ') for query in queries_list}
+                # добавляем в словарь
+                queries = dict(list(queries_dict.items()) + list(queries.items()))
 
 
-        # если указан ключ --input и файл существует, то считываем из него список запросов
-        if args.input and os.path.isfile(args.input):
-            queries = dict(list(read_queries(args.input).items()) + list(queries.items()))
+            # если указан ключ --input и файл существует, то считываем из него список запросов
+            if args.input and os.path.isfile(args.input):
+                queries = dict(list(read_queries(args.input).items()) + list(queries.items()))
 
-        # если заданы расширения файлов, то сохраняем их в списке
-        #types = ['pdf', 'djvu', 'mp3', 'ogg']
-        types = []
-        if args.types:
+            # если заданы расширения файлов, то сохраняем их в списке
+            #types = ['pdf', 'djvu', 'mp3', 'ogg']
             types = []
-            if len(args.types) == 1:
-                types.append( [tp.split(' ') if len(tp.split(' ')) > 1 else tp for tp in args.types][0] )
-            else:
-                types += [tp[:-1] if tp[-1] == ',' else tp for tp in args.types]
+            if args.types:
+                types = []
+                if len(args.types) == 1:
+                    types.append( [tp.split(' ') if len(tp.split(' ')) > 1 else tp for tp in args.types][0] )
+                else:
+                    types += [tp[:-1] if tp[-1] == ',' else tp for tp in args.types]
 
-        # если указан ключ --output, то запускаем процесс выполнения запросов и запись результатов в выходной файл
-        if args.output:
-            search_and_save(queries, types, args.output)
-    else:
-        print_help()
+            # если указан ключ --output, то запускаем процесс выполнения запросов и запись результатов в выходной файл
+            if args.output:
+
+                # проверяем наличие файла
+                if not can_overwrite(args.output):
+                    sys.exit()
+
+                # запускаем процесс
+                search_and_save(queries, types, args.output)
+        else:
+            print_help()
+
+    except KeyboardInterrupt:
+        sys.exit()
