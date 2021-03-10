@@ -119,7 +119,11 @@ def iso_639_2(language):
 # парсинг адреса электронной почты из строки
 #-----------------------------------------------------------------------
 def email(text):
-    return parseaddr(text)[1]
+    match = re.findall(r'[\w\.-]+@[\w\.-]+', text)
+    if len(match) == 0:
+        return ''
+    else:
+        return match[0]
 
 
 #-----------------------------------------------------------------------
@@ -173,6 +177,19 @@ def search_and_save(queries, types, out_file_name):
                 # записываем язык в соотвествии со стандартом ISO 639-2 (три символа)
                 row['language'] = iso_639_2(get_property(meta_data, 'language'))
                 row['out_file_path'] = out_file_path
+            else:
+                continue
+
+            if 'dir' in dict_data:
+                row['in_file_path'] = dict_data['dir']
+            else:
+                row['in_file_path'] = ''
+
+            if 'files' in dict_data:
+
+                # если не указан заголовок файла, то пропускаем и переходим к следующему идентификатору
+                if len(row['title']) == 0:
+                    continue
 
                 # определяем авторов
                 authors = ''
@@ -183,6 +200,10 @@ def search_and_save(queries, types, out_file_name):
                         authors += creator.split(',')[0]
                 else:
                     authors += row['creator'].split(',')[0]
+                if len(authors) > 0:
+                    authors = ', (%s)' % authors
+                else:
+                    authors = ''
                 authors = check_file_name(authors)
 
                 # определяем год издания
@@ -190,36 +211,24 @@ def search_and_save(queries, types, out_file_name):
                     year = row['year'][-1]
                 else:
                     year = row['year']
+                if len(year) > 0:
+                    year = ', (%s)' % year
+                else:
+                    year = ''
                 year = check_file_name(year)
 
-                # ограничиваем длину названия файла
+                # заголовок
                 title = check_file_name(row['title'])
-                max_title_len = 127 - 6 - 7 - len(authors) - len(year)
-                if len(title) > max_title_len:
-                    title = title[:max_title_len].strip(' ')
 
-                # формируем название файла без расширения
-                if len(row['title']) > 0:
-                    if len(year) > 0 and len(authors) > 0:
-                        book_title = '%s, %s (%s)' % (title, authors, year)
-                    elif len(year) > 0 and len(authors) == 0:
-                        book_title = '%s, (%s)' % (title, year)
-                    elif len(year) == 0 and len(authors) > 0:
-                        book_title = '%s, %s' % (title, authors)
-                    else:
-                        book_title = '%s' % (title)
-                    row['out_file_name'] = book_title
+                # язык произведения
+                language = row['language']
+                if len(language) > 0:
+                    language = ', %s' % language
                 else:
-                    continue
-            else:
-                continue
+                    language = ''
+                language = check_file_name(language)
 
-            if 'dir' in dict_data:
-                row['in_file_path'] = dict_data['dir']
-            else:
-                row['in_file_path'] = ''
-
-            if 'files' in dict_data:
+                # перебираем все файлы, соответствующие данному идентификатору
                 files_data = dict_data['files']
                 for file_data in files_data:
                     try:
@@ -234,14 +243,40 @@ def search_and_save(queries, types, out_file_name):
                         suffixes = []
                         # если имя файла не содержит суффиксов и соответствует одному из типов, то сохраняем
                         if not any([suffix in name for suffix in suffixes]) and (len(types) == 0 or (len(types) > 0 and extention in types)):
+
+                            # исходное имя файла
                             row['in_file_name'] = file_name
+
+                            # определяем число файлов данного типа
                             count = 0
                             for fn in list(df['out_file_name']):
                                 count += fn.count(extention)
                             if count > 0:
-                                row['out_file_name'] = book_title + ' (%d)'%count + '.' + extention
+                                file_count = ' (%d)' % count
                             else:
-                                row['out_file_name'] = book_title + '.' + extention
+                                file_count = ''
+
+                            extention = '.' + extention
+
+                            # ограничиваем длину названия файла
+                            max_title_len = 127 - len(authors + language + year + file_count + extention)
+                            if len(title) > max_title_len:
+                                title = title[:max_title_len].strip(' ')
+
+                            # формируем название файла
+                            row['out_file_name'] = title + authors + language + year + file_count + extention
+                            """
+                            if len(year) > 0 and len(authors) > 0:
+                                book_title = '%s, %s (%s)' % (title, authors, year)
+                            elif len(year) > 0 and len(authors) == 0:
+                                book_title = '%s, (%s)' % (title, year)
+                            elif len(year) == 0 and len(authors) > 0:
+                                book_title = '%s, %s' % (title, authors)
+                            else:
+                                book_title = '%s' % (title)
+                            """
+
+                            #row['out_file_name'] = book_title + file_count + '.' + extention
 
                             # отображаем номер, общее количество и текст запроса, порядковый номер и общее количество
                             # идентификаторов, новое имя файла
